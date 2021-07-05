@@ -1,0 +1,7 @@
+line-bot-sdk
+bs4
+flask
+pymongo
+pandas
+scipy
+azure-cognitiveservices-vision-computervision

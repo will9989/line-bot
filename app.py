@@ -17,8 +17,8 @@ from msrest.authentication import CognitiveServicesCredentials
 app = Flask(__name__)
 
 secretFile = json.load(open("secretFile.txt",'r'))
-channelAccessToken = secretFile['channelAccessToken']
-channelSecret = secretFile['channelSecret']
+channelAccessToken = secretFile['y5fns7lFbWJw/ytiO+sD1bwpOy+k00jaDx6CLndUG2JCb9HkbQIVcpJbIIimtUcaMGHir9Z5wNsRhYCEZbCZnBU4OpuBqfgGKSmMpUfriucIgA9OHmhtsjDnAqWE14QnXQdc6Gn1ug7ewqDCZn06TwdB04t89/1O/w1cDnyilFU=']
+channelSecret = secretFile['ca73b245c073205927af5fd8f5d95783']
 
 static_tmp_path = os.path.join( 'static', 'tmp')
 
@@ -26,8 +26,10 @@ line_bot_api = LineBotApi(channelAccessToken)
 handler = WebhookHandler(channelSecret)
 
 
-#line框架
-@app.route("/", methods=['POST'])
+#  line框架
+
+
+@app.route("callback/", methods=['POST'])
 def callback():
     # get X-Line-Signature header value
     signature = request.headers['X-Line-Signature']
@@ -45,7 +47,9 @@ def callback():
 
     return 'OK'
 
-#接收圖片
+#  接收圖片
+
+
 @handler.add(MessageEvent, message=(ImageMessage, TextMessage))
 def handle_message(event):
     if isinstance(event.message, ImageMessage):
@@ -71,7 +75,7 @@ def handle_message(event):
                     TextSendMessage(text='請傳一張圖片給我')
                 ])
 
-#圖片轉敘述api
+#  圖片轉敘述api
         # Set API key.
         subscription_key = 'key'
 
@@ -89,7 +93,7 @@ def handle_message(event):
 
         description_results = computervision_client.describe_image_in_stream(local_image)
         
-#回傳圖片描述
+#  回傳圖片描述
         for caption in description_results.captions:
             line_bot_api.reply_message(event.reply_token,TextSendMessage(caption.text))
 
