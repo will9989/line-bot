@@ -5,3 +5,4 @@ pymongo
 pandas
 scipy
 azure-cognitiveservices-vision-computervision
+azure-ai-textanalytics

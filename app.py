@@ -1,35 +1,31 @@
 from flask import Flask, request, abort
-
-from linebot import (LineBotApi, WebhookHandler)
+import uuid
+import requests
 from linebot.exceptions import (InvalidSignatureError)
-
-
-
+import configparser
 from linebot.models import *
-import json
 import tempfile, os
-
 from azure.cognitiveservices.vision.computervision import ComputerVisionClient
 from msrest.authentication import CognitiveServicesCredentials
-
-
+from azure.core.credentials import AzureKeyCredential
+from azure.ai.textanalytics import TextAnalyticsClient
+from linebot import (
+    LineBotApi, WebhookHandler
+)
 
 app = Flask(__name__)
+config = configparser.ConfigParser()
+config.read("config.ini")
 
-secretFile = json.load(open("secretFile.txt",'r'))
-channelAccessToken = secretFile['y5fns7lFbWJw/ytiO+sD1bwpOy+k00jaDx6CLndUG2JCb9HkbQIVcpJbIIimtUcaMGHir9Z5wNsRhYCEZbCZnBU4OpuBqfgGKSmMpUfriucIgA9OHmhtsjDnAqWE14QnXQdc6Gn1ug7ewqDCZn06TwdB04t89/1O/w1cDnyilFU=']
-channelSecret = secretFile['ca73b245c073205927af5fd8f5d95783']
+line_bot_api = LineBotApi(config['line_bot']['Channel_Access_Token'])
+handler = WebhookHandler(config['line_bot']['Channel_Secret'])
 
-static_tmp_path = os.path.join( 'static', 'tmp')
-
-line_bot_api = LineBotApi(channelAccessToken)
-handler = WebhookHandler(channelSecret)
-
+static_tmp_path = os.path.join('static', 'tmp')
 
 #  line框架
 
 
-@app.route("callback/", methods=['POST'])
+@app.route("/callback", methods=['POST'])
 def callback():
     # get X-Line-Signature header value
     signature = request.headers['X-Line-Signature']
@@ -52,6 +48,8 @@ def callback():
 
 @handler.add(MessageEvent, message=(ImageMessage, TextMessage))
 def handle_message(event):
+    SendMessages = list()
+    textlist = []
     if isinstance(event.message, ImageMessage):
         ext = 'jpg'
         message_content = line_bot_api.get_message_content(event.message.id)
@@ -64,9 +62,8 @@ def handle_message(event):
         dist_name = os.path.basename(dist_path)
         os.rename(tempfile_path, dist_path)
         try:
-  
             path = os.path.join('static', 'tmp', dist_name)
-            print(path) 
+            print(path)
 
         except:
             line_bot_api.reply_message(
@@ -74,33 +71,100 @@ def handle_message(event):
                     TextSendMessage(text=' yoyo'),
                     TextSendMessage(text='請傳一張圖片給我')
                 ])
+            return 0
 
-#  圖片轉敘述api
+        #  圖片轉敘述api
         # Set API key.
-        subscription_key = 'key'
+        subscription_key = config['azure_com_vi_api']['key']
 
         # Set endpoint.
-        endpoint = 'endpoint'
+        endpoint = config['azure_com_vi_api']['endpoint']
 
         # Call API
         computervision_client = ComputerVisionClient(endpoint, CognitiveServicesCredentials(subscription_key))
 
         # 指定圖檔
-        local_image_path = os.getcwd() + '/static/tmp/{}'.format(path.split('/')[-1])
+        local_image_path = os.getcwd() + '\\static\\tmp\\{}'.format(path.split('\\')[-1])
 
         # 讀取圖片
         local_image = open(local_image_path, "rb")
-
+        # call API
         description_results = computervision_client.describe_image_in_stream(local_image)
-        
-#  回傳圖片描述
-        for caption in description_results.captions:
-            line_bot_api.reply_message(event.reply_token,TextSendMessage(caption.text))
+        # Get the captions (descriptions) from the response, with confidence level
+        print("Description of remote image: ")
+        if (len(description_results.captions) == 0):
+            print("No description detected.")
+        else:
+            for caption in description_results.captions:
+                print("'{}' with confidence {:.2f}%".format(caption.text, caption.confidence * 100))
+                textlist.append(caption.text)
 
+        # 抓取關鍵字 api
+        key = config['azure_text_an_api']['key']
+        # 抓取關鍵字 endpoint
+        endpoint = config['azure_text_an_api']['endpoint']
 
+        text_analytics_client = TextAnalyticsClient(endpoint=endpoint, credential=AzureKeyCredential(key))
+        documents = ['{}'.format(caption.text)]
 
+        result = text_analytics_client.extract_key_phrases(documents)
+        for doc in result:
+            if not doc.is_error:
+                print(doc.key_phrases)
+                for docc in doc.key_phrases:
+                    textlist.append(docc)
 
-        
+            if doc.is_error:
+                print(doc.id, doc.error)
+
+        # 中翻英api key
+        subscription_key = config['azure_trans_api']['key']
+        # 中翻英api endpoint
+        endpoint = config['azure_trans_api']['endpoint']
+        path = '/translate?api-version=3.0'
+
+        params = '&to=de&to=zh-Hant'
+        constructed_url = endpoint + path + params
+
+        headers = {
+            'Ocp-Apim-Subscription-Key': subscription_key,
+            'Content-type': 'application/json',
+            'X-ClientTraceId': str(uuid.uuid4())
+        }
+
+        wee = []
+        for text in textlist:
+            arug = {'text': "{}".format(text)}
+            wee.append(arug)
+
+        body = wee
+
+        request = requests.post(constructed_url, headers=headers, json=body)
+        response = request.json()
+        print(response)
+        wcl = []
+        for n, i in enumerate(response):
+            wcl.append(response[n]['translations'][1]['text'])
+        ett = wcl[0]
+        print(wcl)
+        print(ett)
+        wew = []
+        for u, docc in enumerate(doc.key_phrases):
+            r = str(docc + '->' + wcl[u + 1])
+            wew.append(r)
+
+        awew = ",".join(wew)
+        staa = """描述：{}\n翻譯：{}\n單字：{}""".format(caption.text, ett, awew)
+
+        # google語音
+        stream_url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&ttsspeed=1&q={}'.format(
+            caption.text)
+        stream_url = stream_url.replace(' ', '%20')
+
+        SendMessages.append(AudioSendMessage(original_content_url=stream_url, duration=3000))
+        SendMessages.append(TextSendMessage(text=staa))
+        line_bot_api.reply_message(event.reply_token, SendMessages)
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0')
