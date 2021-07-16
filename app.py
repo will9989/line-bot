@@ -84,7 +84,7 @@ def handle_message(event):
         computervision_client = ComputerVisionClient(endpoint, CognitiveServicesCredentials(subscription_key))
 
         # 指定圖檔
-        local_image_path = os.getcwd() + '\\static\\tmp\\{}'.format(path.split('\\')[-1])
+        local_image_path = os.getcwd() + '/static/tmp/{}'.format(path.split('/')[-1])
 
         # 讀取圖片
         local_image = open(local_image_path, "rb")
